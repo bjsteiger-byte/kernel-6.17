@@ -1782,6 +1782,39 @@ SYSCALL_DEFINE3(set_mempolicy, int, mode, const unsigned long __user *, nmask,
 	return kernel_set_mempolicy(mode, nmask, maxnode);
 }
 
+SYSCALL_DEFINE4(set_mempolicy_for, pid_t, tid, int, mode, 
+		const unsigned long __user *, nmask, unsigned long, maxnode)
+{
+	nodemask_t nodes;
+	int i;
+	int err;
+	
+	printk(KERN_INFO "set_mempolicy_for called with tid=%d, mode=%d, maxnode=%lu\n", 
+		tid, mode, maxnode);
+
+    //TODO: Make this function do more than just print out information on how the parameters work.
+	if (nmask && maxnode > 0) {
+		err = get_nodes(&nodes, nmask, maxnode);
+		if (err) {
+			printk(KERN_INFO "set_mempolicy_for: error getting nodes: %d\n", err);
+			return err;
+		}
+		
+		printk(KERN_INFO "set_mempolicy_for: node mask contents:");
+		for (i = 0; i < MAX_NUMNODES; i++) {
+			if (node_isset(i, nodes)) {
+				printk(KERN_CONT " %d", i);
+			}
+		}
+		printk(KERN_CONT "\n");
+	} else {
+		printk(KERN_INFO "set_mempolicy_for: nmask is NULL or maxnode is 0\n");
+	}
+
+	printk(KERN_INFO "set_mempolicy_for: alleged success\n");
+	return 0;
+}
+
 static int kernel_migrate_pages(pid_t pid, unsigned long maxnode,
 				const unsigned long __user *old_nodes,
 				const unsigned long __user *new_nodes)
