@@ -992,6 +992,8 @@ static int mbind_range(struct vma_iterator *vmi, struct vm_area_struct *vma,
 static long do_set_mempolicy(unsigned short mode, unsigned short flags,
 			     nodemask_t *nodes)
 {
+
+	//TODO: add task_struct* parameter, replace all references to "current" with it.
 	struct mempolicy *new, *old;
 	NODEMASK_SCRATCH(scratch);
 	int ret;
@@ -1773,6 +1775,7 @@ static long kernel_set_mempolicy(int mode, const unsigned long __user *nmask,
 	if (err)
 		return err;
 
+	//TODO: Add direct passing of "current" to this function after making new parameter
 	return do_set_mempolicy(lmode, mode_flags, &nodes);
 }
 
@@ -1811,8 +1814,42 @@ SYSCALL_DEFINE4(set_mempolicy_for, pid_t, tid, int, mode,
 		printk(KERN_INFO "set_mempolicy_for: nmask is NULL or maxnode is 0\n");
 	}
 
-	printk(KERN_INFO "set_mempolicy_for: alleged success\n");
-	return 0;
+	printk(KERN_INFO "set_mempolicy_for: proceeding to actual functionality\n");
+
+	//Get any info we need from current task
+	int processId;
+	task_lock(current);
+	processId = current->tgid;
+	task_unlock(current);
+
+	struct task_struct* task;
+
+	rcu_read_lock();
+    task = find_task_by_vpid(tid);
+    if (task) get_task_struct(task);
+    rcu_read_unlock();
+
+	if (!task) {
+		printk(KERN_INFO "set_mempolicy_for: Failed to find task %d\n", tid);
+		return 1;
+	}
+
+	task_lock(task);
+
+	int ret = 0;
+
+	if (task->tgid != processId) {
+		printk(KERN_INFO "set_mempolicy_for: Target process %d is not the same as calling process %d\n", task->tgid, processId);
+		ret = 1;
+	}
+	else {
+		printk(KERN_INFO "set_mempolicy_for: Successfully obtained task info\n");
+	}
+
+	task_unlock(task);
+	put_task_struct(task);
+
+	return ret;
 }
 
 static int kernel_migrate_pages(pid_t pid, unsigned long maxnode,
@@ -3343,6 +3380,7 @@ void __init numa_policy_init(void)
 /* Reset policy of current process to default */
 void numa_default_policy(void)
 {
+	//TODO: Add direct passing of "current" to this function after making new parameter
 	do_set_mempolicy(MPOL_DEFAULT, 0, NULL);
 }
 
