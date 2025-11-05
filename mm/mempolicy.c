@@ -990,10 +990,9 @@ static int mbind_range(struct vma_iterator *vmi, struct vm_area_struct *vma,
 
 /* Set the process memory policy */
 static long do_set_mempolicy(unsigned short mode, unsigned short flags,
-			     nodemask_t *nodes)
+			     nodemask_t *nodes, struct task_struct *task)
 {
 
-	//TODO: add task_struct* parameter, replace all references to "current" with it.
 	struct mempolicy *new, *old;
 	NODEMASK_SCRATCH(scratch);
 	int ret;
@@ -1007,22 +1006,22 @@ static long do_set_mempolicy(unsigned short mode, unsigned short flags,
 		goto out;
 	}
 
-	task_lock(current);
+	task_lock(task);
 	ret = mpol_set_nodemask(new, nodes, scratch);
 	if (ret) {
-		task_unlock(current);
+		task_unlock(task);
 		mpol_put(new);
 		goto out;
 	}
 
-	old = current->mempolicy;
-	current->mempolicy = new;
+	old = task->mempolicy;
+	task->mempolicy = new;
 	if (new && (new->mode == MPOL_INTERLEAVE ||
 		    new->mode == MPOL_WEIGHTED_INTERLEAVE)) {
-		current->il_prev = MAX_NUMNODES-1;
-		current->il_weight = 0;
+		task->il_prev = MAX_NUMNODES-1;
+		task->il_weight = 0;
 	}
-	task_unlock(current);
+	task_unlock(task);
 	mpol_put(old);
 	ret = 0;
 out:
@@ -1760,7 +1759,7 @@ SYSCALL_DEFINE6(mbind, unsigned long, start, unsigned long, len,
 
 /* Set the process memory policy */
 static long kernel_set_mempolicy(int mode, const unsigned long __user *nmask,
-				 unsigned long maxnode)
+				 unsigned long maxnode, struct task_struct *task)
 {
 	unsigned short mode_flags;
 	nodemask_t nodes;
@@ -1775,14 +1774,13 @@ static long kernel_set_mempolicy(int mode, const unsigned long __user *nmask,
 	if (err)
 		return err;
 
-	//TODO: Add direct passing of "current" to this function after making new parameter
-	return do_set_mempolicy(lmode, mode_flags, &nodes);
+	return do_set_mempolicy(lmode, mode_flags, &nodes, task);
 }
 
 SYSCALL_DEFINE3(set_mempolicy, int, mode, const unsigned long __user *, nmask,
 		unsigned long, maxnode)
 {
-	return kernel_set_mempolicy(mode, nmask, maxnode);
+	return kernel_set_mempolicy(mode, nmask, maxnode, current);
 }
 
 SYSCALL_DEFINE4(set_mempolicy_for, pid_t, tid, int, mode, 
@@ -1795,7 +1793,6 @@ SYSCALL_DEFINE4(set_mempolicy_for, pid_t, tid, int, mode,
 	printk(KERN_INFO "set_mempolicy_for called with tid=%d, mode=%d, maxnode=%lu\n", 
 		tid, mode, maxnode);
 
-    //TODO: Make this function do more than just print out information on how the parameters work.
 	if (nmask && maxnode > 0) {
 		err = get_nodes(&nodes, nmask, maxnode);
 		if (err) {
@@ -1816,11 +1813,7 @@ SYSCALL_DEFINE4(set_mempolicy_for, pid_t, tid, int, mode,
 
 	printk(KERN_INFO "set_mempolicy_for: proceeding to actual functionality\n");
 
-	//Get any info we need from current task
-	int processId;
-	task_lock(current);
-	processId = current->tgid;
-	task_unlock(current);
+	int processId = current->tgid;
 
 	struct task_struct* task;
 
@@ -1834,21 +1827,17 @@ SYSCALL_DEFINE4(set_mempolicy_for, pid_t, tid, int, mode,
 		return 1;
 	}
 
-	task_lock(task);
-
-	int ret = 0;
+	long ret = 0;
 
 	if (task->tgid != processId) {
 		printk(KERN_INFO "set_mempolicy_for: Target process %d is not the same as calling process %d\n", task->tgid, processId);
 		ret = 1;
 	}
 	else {
-		printk(KERN_INFO "set_mempolicy_for: Successfully obtained task info\n");
+		ret = kernel_set_mempolicy(mode, nmask, maxnode, task);
 	}
 
-	task_unlock(task);
 	put_task_struct(task);
-
 	return ret;
 }
 
@@ -3371,7 +3360,7 @@ void __init numa_policy_init(void)
 	if (unlikely(nodes_empty(interleave_nodes)))
 		node_set(prefer, interleave_nodes);
 
-	if (do_set_mempolicy(MPOL_INTERLEAVE, 0, &interleave_nodes))
+	if (do_set_mempolicy(MPOL_INTERLEAVE, 0, &interleave_nodes, current))
 		pr_err("%s: interleaving failed\n", __func__);
 
 	check_numabalancing_enable();
@@ -3380,8 +3369,7 @@ void __init numa_policy_init(void)
 /* Reset policy of current process to default */
 void numa_default_policy(void)
 {
-	//TODO: Add direct passing of "current" to this function after making new parameter
-	do_set_mempolicy(MPOL_DEFAULT, 0, NULL);
+	do_set_mempolicy(MPOL_DEFAULT, 0, NULL, current);
 }
 
 /*
