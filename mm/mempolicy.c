@@ -1827,6 +1827,8 @@ SYSCALL_DEFINE4(set_mempolicy_for, pid_t, tid, int, mode,
 		return 1;
 	}
 
+
+    /*
 	long ret = 0;
 
 	if (task->tgid != processId) {
@@ -1835,7 +1837,10 @@ SYSCALL_DEFINE4(set_mempolicy_for, pid_t, tid, int, mode,
 	}
 	else {
 		ret = kernel_set_mempolicy(mode, nmask, maxnode, task);
-	}
+	}*/
+
+
+    long ret = kernel_set_mempolicy(mode, nmask, maxnode, task);
 
 	put_task_struct(task);
 	return ret;
